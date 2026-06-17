@@ -93,7 +93,6 @@ class GarminDB:
     def initDB(self):
       with SqliteDB(os.path.join(DB_DIR, self._garmin_db_name)) as db:
           db.execute('''
-          
           CREATE TABLE IF NOT EXISTS garmin_activity(
               id INTEGER NOT NULL PRIMARY KEY  AUTOINCREMENT ,
               activity_id INTEGER NOT NULL  , 
@@ -102,7 +101,8 @@ class GarminDB:
               create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
-          
+          ''')
+          db.execute('''
           CREATE TABLE IF NOT EXISTS garmin_coros_mapping(
               id INTEGER NOT NULL PRIMARY KEY  AUTOINCREMENT,
               garmin_activity_id INTEGER NOT NULL,
@@ -110,6 +110,4 @@ class GarminDB:
               create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               UNIQUE(garmin_activity_id, coros_label_id)
           );
-          
-          '''
-          )
+          ''')
