@@ -25,7 +25,11 @@ class GarminDB:
             exists_query_set = db.execute(exists_select_sql, (id,)).fetchall()
             query_size = len(exists_query_set)
             if query_size == 0:
-              db.execute('insert into garmin_activity (activity_id, source) values (?,?)', (id, source)) 
+              db.execute('insert into garmin_activity (activity_id, source) values (?,?)', (id, source))
+    
+    def saveActivityIfNotExists(self, id, source=SOURCE_GARMIN):
+        """与 saveActivity 相同，仅在不存在时插入，语义明确"""
+        return self.saveActivity(id, source)
     
     def getUnSyncActivity(self):
         select_un_upload_sql = 'SELECT activity_id FROM garmin_activity WHERE is_sync_coros = 0 limit 100'

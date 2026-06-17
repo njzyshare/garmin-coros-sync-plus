@@ -64,12 +64,18 @@ if __name__ == "__main__":
       exit()
   
   ## 记录活动到 garmin.db，区分来源
-  ## 同时收集从高驰同步来的活动 ID，跳过不上传回高驰
+  ## 已经存在的不覆盖 source（保留已有的 source 标记）
   skip_source_coros_count = 0
   for activity in all_activities:
       activity_id = activity["activityId"]
-      # 检查是否已经是高驰来源（之前通过 coros-sync-garmin 同步过来的）
-      garmin_db.saveActivity(activity_id, SOURCE_GARMIN)
+      # 如果已存在（之前通过 coros-sync-garmin 同步过来的），保留已有 source 标记
+      existing_source = garmin_db.getSource(activity_id)
+      if existing_source is not None:
+          # 已存在则跳过，保留原有 source 标记
+          pass
+      else:
+          # 新活动，标记为佳明原生
+          garmin_db.saveActivity(activity_id, SOURCE_GARMIN)
 
   
 
