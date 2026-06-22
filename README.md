@@ -1,4 +1,4 @@
-# 如果出现无法同步请检查下代码是否最新如果非最新请重新fork sync代码后删除db/garmin.db文件重跑一遍！！！
+# 如果出现无法同步请检查下代码是否最新如果非最新请重新fork sync代码后删除db/目录下文件重跑一遍！！！
 
 ## 关于本仓库
 
@@ -6,81 +6,78 @@
 
 | # | 改动内容 | 说明 |
 |---|---------|------|
-| 1 | **Python 版本升级** | 从 Python 3.10 升级到 3.13，升级 Actions 版本 (checkout@v3→v4, setup-python@v3→v5, cache@v3→v4)，修复 set-output 废弃语法 |
-| 2 | **新增「高驰 → 佳明」反向同步** | 新增 `coros-sync-garmin` 工作流，将高驰原生活动同步到佳明中国区 |
-| 3 | **新增「佳明中国区 → 国际区」跨区同步** | 新增 `garmin-sync-garmin` 工作流，将国区活动同步到国际区（garmin.com），需配置国际区账号 |
-| 4 | **新增双向防数据往返机制** | 详见下方「双向防数据往返机制」章节，防止数据在佳明和高驰之间死循环 |
-| 5 | **新增 `garmin_coros_mapping` 映射表** | 记录佳明 activity_id ↔ 高驰 labelId 的关联关系，实现精确去重 |
-| 6 | **数据库中增加 `source` 字段** | garmin_activity 和 coros_activity 表均增加 source 字段，标记活动来源 |
-| 7 | **工作流全局同步数量灵活切换** | 高驰和佳明国内外三项工作流都遵守 `NEWEST_NUM` 限制，0为全量，＞0时每次够数停止 |
-| 8 | **异常处理优化** | 下载失败标记异常状态、上传失败不 exit 继续处理下一个、同步后清理临时文件 |
-| 9 | **依赖精简与升级** | `requirements.txt` 从固定版本改为范围版本，升级 pydantic/pydantic_core 以兼容 Python 3.13 |
-| 10 | **修复多项 bug** | 缓存步骤 id 缺失、initDB 多语句不支持 Python 3.13、`upload_activity` 返回值比较错误、参数名误导等 |
+| 1 | **Python 版本升级** | 从 Python 3.10 升级到 3.13，升级 Actions 版本，修复 set-output 废弃语法 |
+| 2 | **新增「高驰 → 佳明」反向同步** | 新增 `coros-sync-garmin` 工作流 |
+| 3 | **新增「佳明中国区 ⇆ 国际区」双向跨区同步** | 新增 CN→INTL 和 INTL→CN 两个工作流 |
+| 4 | **工作流全局同步数量灵活切换** | 所有工作流都遵守 `GARMIN_NEWEST_NUM`，0 为全量，＞0 每次够数停止 |
+| 5 | **sync_time_log 时间重叠防重机制** | 废弃旧的 ID 映射防重，改用运动起止时间重叠判断，物理隔离 DB 文件避免覆盖 |
+| 6 | **各工作流 DB 文件独立** | 每个工作流使用自己的 `.db` 文件，git push 互不覆盖 |
+| 7 | **异常处理优化** | 下载失败标记异常、上传失败不 exit 继续处理下一个、同步后清理临时文件 |
+| 8 | **依赖精简与升级** | 从 56 个固定版本精简为 23 个最小直接依赖 |
+| 9 | **修复多项 bug** | 缓存步骤缺失、initDB 多语句、upload_activity 返回值比较错误、参数名误导等 |
 
 ## 双向防数据往返机制
 
-当同时开启多个工作流时，系统内置了**双向防往返机制**，避免数据在两个平台间死循环。两条方向各自使用独立的防护手段：
+当同时开启多个工作流时，系统使用 **sync_time_log 时间重叠防重** 机制，避免数据在平台间死循环。
 
----
+### 核心原理
 
-### 高驰原生活动 → 佳明CN（coros-sync-garmin 方向）
+每次同步成功后会记录源平台活动的起止时间到 `sync_log.db` 中。同步前检查目标方向是否有时间重叠的活动，有则跳过。
 
-**问题**：高驰原生活动同步到佳明后，如果不加防护，它会被 `garmin-sync-coros` 再次传回高驰。
-
-**防护**：使用 `garmin_coros_mapping` 映射表记录"佳明 activity_id ↔ 高驰 labelId"的对应关系。
+### 时序图
 
 ```
-高驰原生活动
-  │ corosClient.getAllActivities() → 获取高驰活动列表
-  │ 对比 garmin_coros_mapping 表
-  ├─ 映射表有记录 → ✅ 跳过（之前从佳明同步过来的）
-  └─ 映射表无记录 → 下载 FIT → 上传到佳明CN
-                    上传成功后：
-                    → saveCorosSourceActivity(upload_id)
-                    → 在 garmin_coros_mapping 写入映射
-                    → 下次不会再被传回佳明
+高驰原生活动 19:00-20:00
+  │ coros-sync-garmin 运行
+  │ 查 sync_time_log: 佳明来源 19:00-20:00 有重叠吗？
+  ├─ 无重叠 → 上传到佳明CN → 写入 sync_log (coros→garmin_cn, 19:00-20:00)
+  │
+  │ garmin-coros-sync 运行（下一轮）
+  │ 佳明新增活动 19:00-20:00（刚才同步过去的）
+  │ 查 sync_time_log: coros来源 19:00-20:00 有重叠吗？
+  └─ 有重叠！→ ✅ 跳过这条活动，不传回高驰
+
+佳明原生活动 08:00-09:00
+  │ garmin-coros-sync 运行
+  │ 查 sync_time_log: coros来源 08:00-09:00 有重叠吗？
+  ├─ 无重叠 → 上传到高驰 → 写入 sync_log (garmin_cn→coros, 08:00-09:00)
+  │
+  │ coros-sync-garmin 运行（下一轮）
+  │ 高驰新增活动 08:00-09:00（刚才同步过去的）
+  │ 查 sync_time_log: garmin_cn来源 08:00-09:00 有重叠吗？
+  └─ 有重叠！→ ✅ 跳过这条活动，不传回佳明
 ```
 
-### 佳明CN原生活动 → 高驰（garmin-sync-coros 方向）
+### 为什么不同平台之间还需要区分？
 
-**问题**：佳明CN原生活动同步到高驰后，如果不加防护，它会在 `coros-sync-garmin` 再次传回佳明。
+因为佳明和高驰使用不同的 ID 体系（佳明用 `activityId`，高驰用 `labelId`），无法直接比对 ID。通过**时间重叠**来判断是否是同一个运动，避免了跨平台 ID 映射的复杂性。
 
-**防护**：使用 `garmin_activity.source` 字段标记每条活动的来源。
+### 多层防护
 
-```
-佳明CM原生活动
-  │ getActivities() → 获取佳明活动列表
-  │ 写入 garmin_activity 表，记录 source
-  │ getUnSyncActivity() → 获取未同步活动
-  │ 遍历检查 getSource()
-  ├─ source=1 → ✅ 跳过（标记为已同步）
-  │            （之前从高驰同步过来的）
-  └─ source=0 → 下载 FIT → 上传到高驰
-```
-
-| source 值 | 含义 | 说明 |
-|:---------:|------|------|
-| 0 | 佳明原生 | 手表直接记录的活动，正常同步到高驰 |
-| 1 | 来自高驰 | 由 `coros-sync-garmin` 从高驰同步到佳明的活动，跳过 |
-
-> 为什么需要两种不同的防护？因为佳明和高驰使用不同的 ID 体系（佳明用 `activityId`，高驰用 `labelId`），无法直接比对。所以佳明侧用 `source` 字段标记来源，高驰侧用映射表建立跨平台 ID 关联。
-
-### 总览
-
-| 工作流 | 方向 | 防护 | 原理 |
-|--------|------|------|------|
-| `coros-sync-garmin` | 高驰 → 佳明 CN | 映射表 | 跳过映射表中已有的高驰活动 |
-| `garmin-coros-sync` | 佳明 CN → 高驰 | source 字段 | 跳过 source=1（高驰来源）的活动 |
-| `garmincn-sync-garminintl` | 佳明 CN → 佳明 INTL | 不涉及 | 两个佳明账号之间同步，无跨平台循环风险 |
-
-### 效果
-
-✅ 三个工作流同时开启也不会出现数据死循环
-✅ 每个运动记录只在源头平台产生一次
+| 层 | 防护 | 说明 |
+|:--:|------|------|
+| 1️⃣ | **is_sync 状态标记** | 每个工作流在自己的 DB 文件中标记已同步的活动 ID，不被其他工作流覆盖 |
+| 2️⃣ | **sync_time_log 时间重叠检查** | 共享时间日志，防止因时间段重叠导致数据往返 |
+| 3️⃣ | **平台自身去重** | 即使前两层失效，佳明/高驰 API 会返回 `DUPLICATE_ACTIVITY`，不会重复导入 |
 
 ### ⚠️ 注意事项
 
-双向防重机制依赖高驰上传接口响应中的 `labelId` 字段建立映射关系。如果高驰接口响应格式变更导致无法提取 `labelId`，`coros-sync-garmin` 可能无法识别已同步活动，导致重复上传尝试（佳明会返回 `DUPLICATE_ACTIVITY` 拒绝，不会重复导入）。如遇此情况，请提交 Issue。
+`sync_log.db` 通过 GitHub Actions Artifact 在所有工作流之间共享传递。如果 Artifact 丢失（例如首次运行或缓存过期），某些活动可能会被重复同步，但平台自身会拒绝重复导入，不会产生实际重复数据。运行几个周期后防重标记会自动恢复。
+
+## 四大同步工作流说明
+
+| 工作流文件 | 同步方向 | 运行时间（北京时间） | 独立 DB | 说明 |
+|-----------|:--------:|:------------------:|:-------:|------|
+| `garmin-coros-sync` | 佳明 CN → 高驰 | 12:00 / 23:00 | `garmin_coros.db` | 将佳明中国区活动同步到高驰 |
+| `coros-sync-garmin` | 高驰 → 佳明 CN | 12:15 / 23:15 | `coros_garmin.db` | 将高驰活动同步到佳明中国区 |
+| `garmincn-sync-garminintl` | 佳明 CN → 佳明 INTL | 12:30 / 23:30 | `cn_intl.db` | 将国区活动跨区同步到国际区 |
+| `garminintl-sync-garmincn` | 佳明 INTL → 佳明 CN | 12:45 / 23:45 | `intl_cn.db` | 将国际区活动跨区同步到国区 |
+
+> ⏰ 四个工作流各间隔 15 分钟运行，避免 DB 文件提交冲突。
+>
+> **调整运行时间**：打开对应的 `.yml` 工作流文件，修改 `schedule` 下的 `cron` 表达式即可。
+> **格式说明**：`cron: '分钟 小时 * * *'`，使用 UTC 时间，北京时间 = UTC + 8。
+> 例如北京时间 `12:00` → UTC `4:00` → `cron: '0 4 * * *'`。
 
 ## DeepWiki源码解析
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/XiaoSiHwang/garmin-sync-coros)
@@ -95,26 +92,12 @@
 | `GARMIN_EMAIL` | 佳明中国区账号邮箱 | 全部 | 国区账号 |
 | `GARMIN_PASSWORD` | 佳明中国区账号密码 | 全部 | |
 | `GARMIN_AUTH_DOMAIN` | 佳明中国区区域 | 全部 | 国区填 `CN` |
-| `GARMIN_NEWEST_NUM` | 每次拉取活动上限（佳明+高驰） | 全部 | 默认 `50`，同步上限，设为 `0` 全量拉取；建议首次运行可设为 `0`，后续改回 `50` 或者更小的值 |
+| `GARMIN_NEWEST_NUM` | 每次拉取活动上限（全局统一） | 全部 | 默认 `50`，设为 `0` 全量拉取；建议首次运行可设为 `0`，后续改回 `50` 或者更小 |
 | `COROS_EMAIL` | 高驰登录邮箱 | garmin-coros-sync / coros-sync-garmin | |
 | `COROS_PASSWORD` | 高驰登录密码 | 同上 | |
-| `GARMIN_INTL_EMAIL` | 佳明国际区账号邮箱 | garmincn-sync-garminintl | |
+| `GARMIN_INTL_EMAIL` | 佳明国际区账号邮箱 | garmincn-sync-garminintl / garminintl-sync-garmincn | |
 | `GARMIN_INTL_PASSWORD` | 佳明国际区账号密码 | 同上 | |
 | `GARMIN_INTL_AUTH_DOMAIN` | 佳明国际区区域 | 同上 | 填 `COM` |
-
-## 三大同步工作流说明
-
-| 工作流文件 | 同步方向 | 运行时间（北京时间） | 说明 |
-|-----------|:--------:|:------------------:|------|
-| `garmin-coros-sync` | 佳明 CN → 高驰 | 12:00 / 23:00 | 将佳明中国区运动数据同步到高驰 |
-| `garmincn-sync-garminintl` | 佳明 CN → 佳明 INTL | 12:15 / 23:15 | 将佳明中国区数据跨区同步到佳明国际区 |
-| `coros-sync-garmin` | 高驰 → 佳明 CN | 12:30 / 23:30（默认停用） | 将高驰原生活动同步到佳明中国区 |
-
-> ⚠️ 三个工作流已错开运行时间（各间隔15分钟），避免 DB 文件提交冲突。
->
-> **调整运行时间**：打开对应的 `.yml` 工作流文件，修改 `schedule` 下的 `cron` 表达式即可。
-> **格式说明**：`cron: '分钟 小时 * * *'`，使用 UTC 时间，北京时间 = UTC + 8。
-> 例如北京时间 `12:00` → UTC `4:00` → `cron: '0 4 * * *'`。
 
 ## Github配置步骤
 ### 1.参数配置
@@ -122,7 +105,7 @@
 ![打开Setting](doc/3451692931372_.pic.jpg)
 找到**Secrets and variables**点击**New repository secret**按钮
 ![Secrets and variables](/doc/3461692931472_.pic.jpg)
-打开**New repository secret**后将上述的参数填入，下图以佳明帐号为例,**Name**填写参数名,**Secret**填写你的信息，重复以上步骤填入五个参数即可
+打开**New repository secret**后将上述的参数填入，下图以佳明帐号为例,**Name**填写参数名,**Secret**填写你的信息，重复以上步骤填入参数即可
 ![填入参数](doc/3471692931624_.pic.jpg)
 
 ### 2.配置WorkFlow权限
@@ -131,7 +114,7 @@
 
 ### 3. workflow配置
 
-项目包含三个工作流文件，按需修改：
+项目包含四个工作流文件，按需修改：
 
 **① garmin-sync-coros.yml**（佳明 CN → 高驰，工作流名为 `garmin-coros-sync`）
 打开文件，将 `GITHUB_NAME` 更改为你的 Github 用户名、`GITHUB_EMAIL` 更改为你的 Github 登录邮箱。
@@ -140,8 +123,12 @@
 同上，修改 `GITHUB_NAME` 和 `GITHUB_EMAIL`。
 同时需在 Github Secrets 中配置 `GARMIN_INTL_EMAIL`、`GARMIN_INTL_PASSWORD`、`GARMIN_INTL_AUTH_DOMAIN`。
 
-**③ coros-sync-garmin.yml**（高驰 → 佳明 CN，默认停用）
+**③ coros-sync-garmin.yml**（高驰 → 佳明 CN，工作流名为 `coros-sync-garmin`）
 同上，修改 `GITHUB_NAME` 和 `GITHUB_EMAIL`。
+
+**④ garminintl-sync-garmincn.yml**（佳明 INTL → 佳明 CN，工作流名为 `garminintl-sync-garmincn`）【新增】
+同上，修改 `GITHUB_NAME` 和 `GITHUB_EMAIL`。
+使用同一组 `GARMIN_INTL_*` 和 `GARMIN_*` 配置。
 
 更改完成后点击右上角 **Commit changes...** 提交即可。
 
