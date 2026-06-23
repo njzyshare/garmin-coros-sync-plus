@@ -66,6 +66,20 @@
 - DB 文件为 `coros_garmin.db`
 - 标记字段为 `is_sync_garmin`
 
+### 佳明跨区同步的防重说明
+
+`garmincn-sync-garminintl`（CN → INTL）和 `garminintl-sync-garmincn`（INTL → CN）两个跨区工作流同样具备时间重叠防重：
+
+```
+CN → INTL 流程:
+  Phase 1: 拉取中国区活动 → 提取起始时间 → 下载FIT文件
+  Phase 2: 切换登录到国际区 → 拉取国际区活动列表（时间重叠参考）
+           → 有时间重叠？→ 跳过
+           → 无重叠？→ 上传到国际区
+
+INTL → CN 流程同上，方向相反
+```
+
 #### 第 3 道防线：佳明平台去重
 
 即使前两道防线失效，佳明 API 自身也会拒绝重复导入（返回 `DUPLICATE_ACTIVITY`）。注意：**高驰目前没有类似的去重能力**，所以第一、二道防线对高驰方向尤其重要。
@@ -79,9 +93,11 @@
 | 工作流 | 首次初始化 | 时间重叠比对 | 平台去重 |
 |:------:|:----------:|:-----------:|:--------:|
 | `garmin-coros-sync` | ✅ | 拉取高驰活动列表比对 | 高驰无去重 |
-| `coros-sync-garmin` | ✅ | 拉取佳明活动列表比对 | 佳明有去重 |
-| `garmincn-sync-garminintl` | ✅ | 佳明间跨区，风险低 | 佳明有去重 |
-| `garminintl-sync-garmincn` | ✅ | 佳明间跨区，风险低 | 佳明有去重 |
+| `coros-sync-garmin` | ✅ | 拉取佳明CN活动列表比对 | 佳明有去重 |
+| `garmincn-sync-garminintl` | ✅ | 拉取佳明INTL活动列表比对 | 佳明有去重 |
+| `garminintl-sync-garmincn` | ✅ | 拉取佳明CN活动列表比对 | 佳明有去重 |
+
+> ⚠️ **关于时间重叠检查的兜底**：如果拉取对方平台活动列表时 API 失败（网络波动），会回退到仅靠 `is_sync` 标记防重。此时可能会有少量重复上传，但平台自身的去重能力（佳明）或 `is_sync` 标记会阻止重复同步。
 
 ## 四大同步工作流说明
 
