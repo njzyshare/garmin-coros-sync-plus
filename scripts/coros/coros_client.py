@@ -136,13 +136,23 @@ class CorosClient:
           "Accept":       "application/json, text/plain, */*",
           "accesstoken": self.accessToken,
        }
-       get_activity_download_url_response = self.req.request(
-              method = 'POST',
-              url=get_activity_download_url,
-              headers=headers
-          )
-       get_activity_download_url_response_json = json.loads(get_activity_download_url_response.data)
-       download_url = get_activity_download_url_response_json['data']['fileUrl']
+       try:
+           get_activity_download_url_response = self.req.request(
+                  method = 'POST',
+                  url=get_activity_download_url,
+                  headers=headers
+              )
+           get_activity_download_url_response_json = json.loads(get_activity_download_url_response.data)
+           if 'data' not in get_activity_download_url_response_json or 'fileUrl' not in get_activity_download_url_response_json.get('data', {}):
+               print(f"  高驰下载响应异常（labelId={id}, sportType={sport_type}）: {get_activity_download_url_response_json}")
+               raise Exception(f"高驰下载 API 响应缺少 data.fileUrl: labelId={id}, sportType={sport_type}, 完整响应: {get_activity_download_url_response_json}")
+           download_url = get_activity_download_url_response_json['data']['fileUrl']
+       except KeyError as e:
+           print(f"  高驰下载响应字段缺失（labelId={id}, sportType={sport_type}）: {e}")
+           raise Exception(f"高驰下载 API 响应字段缺失: labelId={id}, sportType={sport_type}, KeyError={e}")
+       except Exception as e:
+           print(f"  高驰下载失败（labelId={id}, sportType={sport_type}）: {e}")
+           raise
        return self.req.request(
           method = 'GET',
           url=download_url,
