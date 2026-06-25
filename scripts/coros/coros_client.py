@@ -131,25 +131,10 @@ class CorosClient:
     def downloadActivitie(self, id, sport_type):
        self.checkToken()
 
-       # 65535 是未定义的无效运动类型（高驰 API 对某些活动返回异常值）
-       # 尝试用不同的 fileType 和不传 sportType 的方式下载
-       param_sets = [{"sportType": sport_type, "fileType": 4}]
-       if sport_type == 65535 or sport_type > 50000:
-           print(f"  ⚠️ 活动 {id} 的 sportType={sport_type} 异常，将尝试备用参数")
-           param_sets = [
-               {"sportType": sport_type, "fileType": 1},
-               {"sportType": sport_type, "fileType": 0},
-               {"sportType": sport_type, "fileType": 4},
-               {"fileType": 4},           # 不传 sportType
-               {"fileType": 1},           # 不传 sportType
-               {},                         # 啥都不传
-           ]
-
-       last_error = None
-       for params in param_sets:
+       # 先用下载 API 尝试（正常情况）
+       if sport_type != 65535 and sport_type <= 50000:
            try:
-               query = "&".join([f"{k}={v}" for k, v in params.items()])
-               get_activity_download_url = f"{self.teamapi}/activity/detail/download?labelId={id}&{query}"
+               get_activity_download_url = f"{self.teamapi}/activity/detail/download?labelId={id}&sportType={sport_type}&fileType=4"
                headers = {
                   "Accept":       "application/json, text/plain, */*",
                   "accesstoken": self.accessToken,
@@ -167,16 +152,63 @@ class CorosClient:
                       url=download_url,
                       headers=headers
                    )
-               else:
-                   print(f"  尝试参数 {params} 失败（labelId={id}）: {response_json}")
-                   last_error = Exception(f"高驰下载 API 响应缺少 data.fileUrl: labelId={id}, {params}")
-           except Exception as e:
-               print(f"  尝试参数 {params} 异常（labelId={id}）: {e}")
-               last_error = e
-               continue
+           except:
+               pass
 
-       print(f"  高驰下载全部尝试失败（labelId={id}）")
-       raise last_error or Exception(f"高驰下载失败: labelId={id}")
+       # 下载 API 失败时（如 sportType=65535 导致 Parameter input error）
+       # 改用活动详情 API 获取 FIT 文件下载地址
+       print(f"  ⚠️ 下载 API 异常（labelId={id}, sportType={sport_type}），尝试活动详情 API...")
+       try:
+           detail_url = f"{self.teamapi}/activity/detail?labelId={id}"
+           headers = {
+              "Accept":       "application/json, text/plain, */*",
+              "accesstoken": self.accessToken,
+           }
+           detail_response = self.req.request(
+                  method = 'GET',
+                  url=detail_url,
+                  headers=headers
+              )
+           detail_json = json.loads(detail_response.data)
+           if 'data' in detail_json:
+               data = detail_json['data']
+               # 从详情响应中提取文件 URL 或 labelId 信息重新构建下载
+               if 'fileUrl' in data:
+                   return self.req.request(
+                      method = 'GET',
+                      url=data['fileUrl'],
+                      headers=headers
+                   )
+               # 如果详情里有 fitFileUrl、downloadUrl 等字段
+               for key in ('fitFileUrl', 'downloadUrl', 'fitUrl', 'exportUrl'):
+                   if key in data:
+                       return self.req.request(
+                          method = 'GET',
+                          url=data[key],
+                          headers=headers
+                       )
+               # 兜底：用详情中的 sportType 重新尝试下载
+               detail_sport_type = data.get('sportType', 0)
+               if detail_sport_type and detail_sport_type != 65535:
+                   print(f"  活动详情返回 sportType={detail_sport_type}，重新尝试下载")
+                   retry_url = f"{self.teamapi}/activity/detail/download?labelId={id}&sportType={detail_sport_type}&fileType=4"
+                   retry_response = self.req.request(
+                      method = 'POST',
+                      url=retry_url,
+                      headers=headers
+                   )
+                   retry_json = json.loads(retry_response.data)
+                   if 'data' in retry_json and 'fileUrl' in retry_json.get('data', {}):
+                       return self.req.request(
+                          method = 'GET',
+                          url=retry_json['data']['fileUrl'],
+                          headers=headers
+                       )
+           print(f"  活动详情 API 也未获取到文件（labelId={id}）: {detail_json}")
+       except Exception as e:
+           print(f"  活动详情 API 调用失败（labelId={id}）: {e}")
+
+       raise Exception(f"高驰下载失败（所有方式均失败）: labelId={id}, sportType={sport_type}")
 
     ## 检查token是否有效
     def checkToken(self):
