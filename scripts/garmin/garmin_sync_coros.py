@@ -168,7 +168,7 @@ if __name__ == "__main__":
       
     except Exception as err:
       print(f"下载活动 {un_sync_id} 失败: {err}")
-      garmin_db.updateExceptionSyncStatus(un_sync_id)
+      # 下载失败不标记 exception，保留 is_sync_coros=0，下次会重试
   
   if len(file_path_list) == 0:
       print("没有成功下载的活动，退出。")

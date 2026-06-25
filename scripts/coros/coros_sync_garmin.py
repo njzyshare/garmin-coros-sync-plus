@@ -168,7 +168,7 @@ if __name__ == "__main__":
       
     except Exception as err:
       print(f"活动 {activity_id} 同步异常: {err}")
-      coros_db.updateExceptionSyncStatus(activity_id)
+      # 下载失败不标记 exception，保留 is_sync_garmin=0，下次会重试
       fail_count += 1
 
   print(f"\n同步完成。成功: {success_count}, 失败: {fail_count}, 跳过(时间重叠): {skipped_count}")
