@@ -132,16 +132,24 @@ class CorosClient:
        self.checkToken()
 
        # 65535 是未定义的无效运动类型（高驰 API 对某些活动返回异常值）
-       # 尝试用 fileType=1（原始 FIT 格式）或 fileType=0（不指定格式）下载
-       file_types_to_try = [4]
+       # 尝试用不同的 fileType 和不传 sportType 的方式下载
+       param_sets = [{"sportType": sport_type, "fileType": 4}]
        if sport_type == 65535 or sport_type > 50000:
-           print(f"  ⚠️ 活动 {id} 的 sportType={sport_type} 异常，将尝试备用 fileType")
-           file_types_to_try = [1, 0, 4]
+           print(f"  ⚠️ 活动 {id} 的 sportType={sport_type} 异常，将尝试备用参数")
+           param_sets = [
+               {"sportType": sport_type, "fileType": 1},
+               {"sportType": sport_type, "fileType": 0},
+               {"sportType": sport_type, "fileType": 4},
+               {"fileType": 4},           # 不传 sportType
+               {"fileType": 1},           # 不传 sportType
+               {},                         # 啥都不传
+           ]
 
        last_error = None
-       for file_type in file_types_to_try:
+       for params in param_sets:
            try:
-               get_activity_download_url = f"{self.teamapi}/activity/detail/download?labelId={id}&sportType={sport_type}&fileType={file_type}"
+               query = "&".join([f"{k}={v}" for k, v in params.items()])
+               get_activity_download_url = f"{self.teamapi}/activity/detail/download?labelId={id}&{query}"
                headers = {
                   "Accept":       "application/json, text/plain, */*",
                   "accesstoken": self.accessToken,
@@ -160,15 +168,15 @@ class CorosClient:
                       headers=headers
                    )
                else:
-                   print(f"  尝试 fileType={file_type} 失败（labelId={id}, sportType={sport_type}）: {response_json}")
-                   last_error = Exception(f"高驰下载 API 响应缺少 data.fileUrl: labelId={id}, sportType={sport_type}, fileType={file_type}")
+                   print(f"  尝试参数 {params} 失败（labelId={id}）: {response_json}")
+                   last_error = Exception(f"高驰下载 API 响应缺少 data.fileUrl: labelId={id}, {params}")
            except Exception as e:
-               print(f"  尝试 fileType={file_type} 异常（labelId={id}, sportType={sport_type}）: {e}")
+               print(f"  尝试参数 {params} 异常（labelId={id}）: {e}")
                last_error = e
                continue
 
-       print(f"  高驰下载全部尝试失败（labelId={id}, sportType={sport_type}）")
-       raise last_error or Exception(f"高驰下载失败: labelId={id}, sportType={sport_type}")
+       print(f"  高驰下载全部尝试失败（labelId={id}）")
+       raise last_error or Exception(f"高驰下载失败: labelId={id}")
 
     ## 检查token是否有效
     def checkToken(self):
