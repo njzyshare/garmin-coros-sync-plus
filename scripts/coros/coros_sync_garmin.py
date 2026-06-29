@@ -1,5 +1,5 @@
 import os
-import sys 
+import sys
 import datetime
 
 CURRENT_DIR = os.path.split(os.path.abspath(__file__))[0]  # 当前目录
@@ -29,33 +29,53 @@ def init(coros_db):
         os.mkdir(COROS_FIT_DIR)
 
 
+def parse_garmin_time(time_str):
+    """将佳明的时间字符串（如 '2026-06-26 13:58:35'）解析为 UTC datetime"""
+    if not time_str:
+        return None
+    try:
+        dt = datetime.datetime.strptime(time_str.strip(), '%Y-%m-%d %H:%M:%S')
+        return dt - datetime.timedelta(hours=8)
+    except ValueError:
+        try:
+            return datetime.datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+        except:
+            return None
+
+
+def parse_coros_timestamp(ts):
+    """将高驰的 Unix 时间戳转为 UTC datetime"""
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
+    except:
+        return None
+
+
 def get_coros_time(activity):
-    """从高驰活动数据中提取起止时间（ISO UTC 格式）"""
+    """从高驰活动数据中提取起止时间（UTC datetime）"""
     st = activity.get("startTime", 0)
     et = activity.get("endTime", 0)
-    if st and et:
-        return (
-            datetime.datetime.fromtimestamp(st, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            datetime.datetime.fromtimestamp(et, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        )
-    return "", ""
+    return parse_coros_timestamp(st), parse_coros_timestamp(et)
 
 
 def get_garmin_time(activity):
-    """从佳明活动数据中提取起止时间（ISO UTC 格式）"""
-    start = activity.get("startTimeGMT", "") or activity.get("startTimeLocal", "")
-    end = activity.get("endTimeGMT", "") or activity.get("endTimeLocal", "")
-    return start, end
+    """从佳明活动数据中提取起止时间（UTC datetime）"""
+    start_str = activity.get("startTimeGMT", "") or activity.get("startTimeLocal", "")
+    end_str = activity.get("endTimeGMT", "") or activity.get("endTimeLocal", "")
+    return parse_garmin_time(start_str), parse_garmin_time(end_str)
 
 
 def has_time_overlap(target_start, target_end, reference_list, get_start_end_func):
     """
     检查目标时间段是否与参考活动列表中的任何活动有时间重叠。
+    target_start/target_end 和参考列表中返回的值都是 UTC datetime 对象（或 None）。
     重叠条件：A.start < B.end AND A.end > B.start
     """
     for ref in reference_list:
         ref_start, ref_end = get_start_end_func(ref)
-        if ref_start and ref_end:
+        if ref_start and ref_end and target_start and target_end:
             if ref_start < target_end and ref_end > target_start:
                 return True
     return False

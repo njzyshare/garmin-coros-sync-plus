@@ -1,5 +1,6 @@
 import os
-import sys 
+import sys
+import datetime
 
 CURRENT_DIR = os.path.split(os.path.abspath(__file__))[0]  # 当前目录
 config_path = CURRENT_DIR.rsplit('/', 1)[0]  # 上三级目录
@@ -32,11 +33,39 @@ def init(garmin_db):
         os.mkdir(GARMIN_FIT_DIR)
 
 
+def parse_garmin_time(time_str):
+    """将佳明的时间字符串（如 '2026-06-26 13:58:35'）解析为 UTC datetime"""
+    if not time_str:
+        return None
+    try:
+        # 佳明返回的 startTimeGMT 实际是中国区本地时间，需要转 UTC
+        # 格式: '2026-06-26 13:58:35'
+        dt = datetime.datetime.strptime(time_str.strip(), '%Y-%m-%d %H:%M:%S')
+        # 转换为 UTC (北京时间 = UTC+8)
+        return dt - datetime.timedelta(hours=8)
+    except ValueError:
+        try:
+            # 也支持 ISO 格式兜底
+            return datetime.datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+        except:
+            return None
+
+
+def parse_coros_timestamp(ts):
+    """将高驰的 Unix 时间戳转为 UTC datetime"""
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
+    except:
+        return None
+
+
 def get_activity_time(activity):
-    """从佳明活动数据中提取起止时间（ISO UTC 格式）"""
-    start_time = activity.get("startTimeGMT", "") or activity.get("startTimeLocal", "")
-    end_time = activity.get("endTimeGMT", "") or activity.get("endTimeLocal", "")
-    return start_time, end_time
+    """从佳明活动数据中提取起止时间（UTC datetime）"""
+    start_str = activity.get("startTimeGMT", "") or activity.get("startTimeLocal", "")
+    end_str = activity.get("endTimeGMT", "") or activity.get("endTimeLocal", "")
+    return parse_garmin_time(start_str), parse_garmin_time(end_str)
 
 
 def has_time_overlap(target_start, target_end, reference_list, get_start_end_func):
@@ -127,15 +156,9 @@ if __name__ == "__main__":
       if start_time and end_time and coros_activities:
           # 比对高驰活动列表
           def get_coros_time(a):
-              import datetime
               st = a.get("startTime", 0)
               et = a.get("endTime", 0)
-              if st and et:
-                  return (
-                      datetime.datetime.fromtimestamp(st, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-                      datetime.datetime.fromtimestamp(et, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-                  )
-              return ("", "")
+              return parse_coros_timestamp(st), parse_coros_timestamp(et)
           if has_time_overlap(start_time, end_time, coros_activities, get_coros_time):
               print(f"  跳过活动 {activity_id}（{start_time}~{end_time}，高驰已有此时间段记录），避免数据往返")
               garmin_db.updateSyncStatus(activity_id)
