@@ -39,7 +39,8 @@ def parse_garmin_time(time_str):
     if not time_str:
         return None
     try:
-        return datetime.datetime.strptime(time_str.strip(), '%Y-%m-%d %H:%M:%S')
+        dt = datetime.datetime.strptime(time_str.strip(), '%Y-%m-%d %H:%M:%S')
+        return dt.replace(tzinfo=datetime.timezone.utc)
     except ValueError:
         try:
             return datetime.datetime.fromisoformat(time_str.replace('Z', '+00:00'))
