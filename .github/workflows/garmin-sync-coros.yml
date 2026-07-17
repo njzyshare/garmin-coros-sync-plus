@@ -45,6 +45,12 @@ jobs:
           key: Ubuntu-pip-${{ steps.set_variables.outputs.PY }}-${{ steps.set_variables.outputs.REQ_HASH }}
           restore-keys: |
             Ubuntu-pip-${{ steps.set_variables.outputs.PY }}-
+      - name: Restore Garmin token
+        id: cache-token
+        uses: actions/cache@v4
+        with:
+          path: db/garth_tokens
+          key: garmin-token-${{ runner.os }}-${{ secrets.GARMIN_EMAIL }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

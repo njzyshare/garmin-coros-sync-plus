@@ -32,3 +32,6 @@ config.yaml
 /webdav-fit
 /garmin-fit
 /coros-fit
+
+# Garmin OAuth token 缓存（仅用于 GitHub Actions Cache，不进 git）
+db/garth_tokens/
