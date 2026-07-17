@@ -5,6 +5,15 @@
 本仓库（原名 `garmin-sync-coros`，已更名为 `garmin-coros-sync-plus`）基于 [XiaoSiHwang/garmin-sync-coros](https://github.com/XiaoSiHwang/garmin-sync-coros) 进行二次开发，在原项目「佳明同步到高驰」基础上做了大量扩展。**同步佳明和高驰两个平台间的运动数据，核心目标是避免高驰上产生重复的运动记录。**
 
 > ⚠️ **Fork 须知**：你的 GitHub Secrets（账号密码等敏感信息）不会随 Fork 继承。Fork 后需要自行配置 Secrets，详见下方「Github配置步骤」。
+>
+> ⚠️ **佳明 MFA 风控处理**：如果 workflow 运行失败，日志显示 `MFA code:` 或 `EOFError`，说明佳明要求输入双因素认证验证码。解决方法：
+> 1. 去邮箱/手机收验证码
+> 2. 在仓库 Actions 页面找到对应 workflow，点 **Run workflow**
+> 3. 在 **MFA 验证码**输入框中填入收到的验证码，然后点击运行
+> 4. 这次运行会正常登录成功，并将登录凭证缓存到 GitHub Actions Cache 中
+> 5. **后续所有定时任务都会直接复用缓存，不再需要验证码**
+>
+> 所有使用同一佳明账号的工作流共享同一个 Cache，只需填一次验证码即可。如果 token 过期后再次触发 MFA，重复以上步骤即可。
 
 包含以下改动：
 
