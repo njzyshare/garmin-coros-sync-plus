@@ -17,6 +17,12 @@ class GarminClient:
         self.email = email
         self.password = password
         self.garthClient = garth
+        # token 持久化目录，用于缓存登录状态避免重复触发 MFA
+        self._token_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            'db', 'garth_tokens'
+        )
+        os.makedirs(self._token_dir, exist_ok=True)
         # 默认超时 10 秒太短，佳明中国区 API 有时响应较慢，改为 30 秒
         self.garthClient.client.timeout = 30
         self.newestNum = int(newest_num)
@@ -29,6 +35,18 @@ class GarminClient:
   ## 登录装饰器
   def login(func):    
     def ware(self, *args, **kwargs):    
+      import json
+      # 先尝试从本地 token 文件加载
+      token_path = os.path.join(self._token_dir, 'garth_tokens.json')
+      if os.path.exists(token_path):
+          try:
+              with open(token_path, 'r') as f:
+                  import json
+                  data = json.load(f)
+                  self.garthClient.loads(json.dumps(data))
+          except Exception:
+              pass
+      
       try:
          garth.client.username
       except Exception:
@@ -39,6 +57,14 @@ class GarminClient:
         
         # del self.garthClient.sess.headers['User-Agent']
         del self.garthClient.client.sess.headers['User-Agent']
+        
+        # 登录成功，将 token dump 到本地文件
+        try:
+            token_data = json.loads(self.garthClient.dumps())
+            with open(token_path, 'w') as f:
+                json.dump(token_data, f)
+        except Exception:
+            pass
 
       return func(self, *args, **kwargs)
     return ware
