@@ -3,8 +3,12 @@ name: garminintl-sync-garmincn
 on:
   workflow_dispatch:
     inputs:
-      mfa_code:
-        description: '佳明 MFA 验证码（触发风控时填写，INTL 账号）'
+      mfa_code_intl:
+        description: '佳明国际区 MFA 验证码（Phase 1 登录用）'
+        required: false
+        default: ''
+      mfa_code_cn:
+        description: '佳明中国区 MFA 验证码（Phase 2 登录用）'
         required: false
         default: ''
   schedule:
@@ -63,7 +67,9 @@ jobs:
           pip install -r requirements.txt
       - name: Run Intl to Cn Sync
         env:
-          GARMIN_MFA_CODE: ${{ inputs.mfa_code }}
+          GARMIN_MFA_CODE: ${{ inputs.mfa_code_intl }}
+          GARMIN_MFA_CODE_INTL: ${{ inputs.mfa_code_intl }}
+          GARMIN_MFA_CODE_CN: ${{ inputs.mfa_code_cn }}
         run: |
           python scripts/garmin/intl_sync_cn.py
       - name: Push new cookie

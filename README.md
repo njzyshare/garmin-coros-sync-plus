@@ -21,10 +21,10 @@
 > 在浏览器登录高驰网站完成验证码验证即可解除，workflow 后续会自动恢复
 >
 > **极端情况：一个工作流需要填两个验证码**
-> 例如 `garmincn-sync-garminintl`（佳明 CN→INTL）在 Phase 1 登录 CN 时触发 MFA，Phase 2 切换 INTL 账号时也触发 MFA。此时需要分两次运行：
-> 1. 先填 CN 验证码跑一次 → CN 端登录成功并缓存 token
-> 2. 再填 INTL 验证码跑一次 → INTL 端登录成功并缓存 token
-> 3. 第三次开始两个 token 都在缓存中，不再需要验证码
+> 例如 `garmincn-sync-garminintl`（佳明 CN→INTL）在 Phase 1 登录 CN 时触发 MFA，Phase 2 切换 INTL 账号时也触发 MFA。两个账号的验证码输入框会同时显示在 Run workflow 弹窗中：
+> - **佳明中国区 MFA 验证码** — Phase 1 登录用
+> - **佳明国际区 MFA 验证码** — Phase 2 登录用
+> 两个都填好再运行，一次跑完就能把两个账号的 token 都缓存好。
 > 所有使用同一佳明账号的工作流共享同一个 Cache，每个账号只需填一次验证码即可。
 
 包含以下改动：
