@@ -6,14 +6,26 @@
 
 > ⚠️ **Fork 须知**：你的 GitHub Secrets（账号密码等敏感信息）不会随 Fork 继承。Fork 后需要自行配置 Secrets，详见下方「Github配置步骤」。
 >
-> ⚠️ **佳明 MFA 风控处理**：如果 workflow 运行失败，日志显示 `MFA code:` 或 `EOFError`，说明佳明要求输入双因素认证验证码。解决方法：
+> ⚠️ **MFA 风控处理**：GitHub Actions 的 IP 被佳明/高驰触发风控时，会要求输入双因素认证验证码（日志显示 `MFA code:` 或 `EOFError`，高驰会提示 `captcha` 相关错误）。各平台处理方式如下：
+>
+> **佳明中国区（GARMIN_EMAIL）** — 涉及 `garmin-coros-sync`、`coros-sync-garmin`、`garmincn-sync-garminintl`（作为源账号时）、`garminintl-sync-garmincn`（作为目标账号时）
 > 1. 去邮箱/手机收验证码
 > 2. 在仓库 Actions 页面找到对应 workflow，点 **Run workflow**
 > 3. 在 **MFA 验证码**输入框中填入收到的验证码，然后点击运行
-> 4. 这次运行会正常登录成功，并将登录凭证缓存到 GitHub Actions Cache 中
-> 5. **后续所有定时任务都会直接复用缓存，不再需要验证码**
+> 4. 登录成功后会缓存 token，后续定时任务直接复用
 >
-> 所有使用同一佳明账号的工作流共享同一个 Cache，只需填一次验证码即可。如果 token 过期后再次触发 MFA，重复以上步骤即可。
+> **佳明国际区（GARMIN_INTL_EMAIL）** — 涉及 `garmincn-sync-garminintl`（作为目标账号时）、`garminintl-sync-garmincn`（作为源账号时）
+> 同上操作，验证码填到对应 workflow 的 **MFA 验证码**输入框
+>
+> **高驰（COROS_EMAIL）** — 涉及 `garmin-coros-sync`、`coros-sync-garmin`
+> 在浏览器登录高驰网站完成验证码验证即可解除，workflow 后续会自动恢复
+>
+> **极端情况：一个工作流需要填两个验证码**
+> 例如 `garmincn-sync-garminintl`（佳明 CN→INTL）在 Phase 1 登录 CN 时触发 MFA，Phase 2 切换 INTL 账号时也触发 MFA。此时需要分两次运行：
+> 1. 先填 CN 验证码跑一次 → CN 端登录成功并缓存 token
+> 2. 再填 INTL 验证码跑一次 → INTL 端登录成功并缓存 token
+> 3. 第三次开始两个 token 都在缓存中，不再需要验证码
+> 所有使用同一佳明账号的工作流共享同一个 Cache，每个账号只需填一次验证码即可。
 
 包含以下改动：
 
