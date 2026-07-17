@@ -52,7 +52,12 @@ class GarminClient:
         logger.warning("Garmin is not logging in or the token has expired.")
         if self.auth_domain and str(self.auth_domain).upper() == "CN":
           self.garthClient.configure(domain="garmin.cn")
-        self.garthClient.login(self.email, self.password)
+        # 如果设置了 GARMIN_MFA_CODE 环境变量（通过 workflow_dispatch 传入），则用它处理 MFA
+        mfa_code = os.environ.get('GARMIN_MFA_CODE', '')
+        if mfa_code:
+            self.garthClient.login(self.email, self.password, prompt_mfa=lambda: mfa_code)
+        else:
+            self.garthClient.login(self.email, self.password)
         
         # del self.garthClient.sess.headers['User-Agent']
         del self.garthClient.client.sess.headers['User-Agent']

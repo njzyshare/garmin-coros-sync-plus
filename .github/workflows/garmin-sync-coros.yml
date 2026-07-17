@@ -2,6 +2,11 @@ name: garmin-coros-sync
 
 on:
   workflow_dispatch:
+    inputs:
+      mfa_code:
+        description: '佳明 MFA 验证码（触发风控时填写）'
+        required: false
+        default: ''
   schedule:
     - cron: '0 4 * * *'
     - cron: '0 15 * * *'
@@ -56,6 +61,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run Garmin Sync
+        env:
+          GARMIN_MFA_CODE: ${{ inputs.mfa_code }}
         run: |
           python scripts/garmin/garmin_sync_coros.py
       - name: Push new cookie

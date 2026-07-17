@@ -2,6 +2,11 @@ name: garmincn-sync-garminintl
 
 on:
   workflow_dispatch:
+    inputs:
+      mfa_code:
+        description: '佳明 MFA 验证码（触发风控时填写，CN 账号）'
+        required: false
+        default: ''
   schedule:
     - cron: '30 4 * * *'
     - cron: '30 15 * * *'
@@ -59,6 +64,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run Garmin Cross-Region Sync
+        env:
+          GARMIN_MFA_CODE: ${{ inputs.mfa_code }}
         run: |
           python scripts/garmin/garmin_sync_garmin.py
       - name: Push new cookie
