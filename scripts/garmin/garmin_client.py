@@ -41,9 +41,8 @@ class GarminClient:
       if os.path.exists(token_path):
           try:
               with open(token_path, 'r') as f:
-                  import json
-                  data = json.load(f)
-                  self.garthClient.loads(json.dumps(data))
+                  token_str = f.read()
+                  self.garthClient.loads(token_str)
           except Exception:
               pass
       
@@ -58,11 +57,11 @@ class GarminClient:
         # del self.garthClient.sess.headers['User-Agent']
         del self.garthClient.client.sess.headers['User-Agent']
         
-        # 登录成功，将 token dump 到本地文件
+        # 登录成功，将 token dump 到本地文件（garth.dumps() 返回 base64 编码的 JSON 字符串）
         try:
-            token_data = json.loads(self.garthClient.dumps())
+            token_str = self.garthClient.dumps()
             with open(token_path, 'w') as f:
-                json.dump(token_data, f)
+                f.write(token_str)
         except Exception:
             pass
 
